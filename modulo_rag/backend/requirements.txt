@@ -1,0 +1,27 @@
+# RAG Service Dependencies
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-dotenv>=1.0.0
+
+# Langchain
+langchain>=0.1.0
+langchain-groq>=0.0.1
+langchain-community>=0.0.10
+
+# Document processing
+pypdf>=3.17.0
+python-multipart>=0.0.6
+
+# Vector store
+chromadb>=0.4.0
+
+# Embeddings (gratuito, local)
+sentence-transformers>=2.2.0
+
+# HTTP client
+httpx>=0.25.0
+
+# OCR para PDFs de imagen
+easyocr>=1.7.0
+pdf2image>=1.16.0
+Pillow>=10.0.0

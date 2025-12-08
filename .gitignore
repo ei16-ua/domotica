@@ -1,0 +1,54 @@
+.vscode
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+
+# Bases de datos
+*.db
+
+# Archivos subidos
+modulo_material/backend/material_files/*.pdf
+modulo_material/backend/material_files/*.PDF
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Secretos y API keys
+.env
+.env.local
+.env.*
+
+# Node modules
+node_modules/
+.npm/
+
+# ChromaDB
+modulo_rag/backend/chroma_db/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build/Dist
+dist/
+build/
+*.exe
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store

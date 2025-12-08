@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Frontend módulo de material</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f7;
+    }
+    h1 { margin-top: 0; }
+    form {
+      background: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      margin-bottom: 24px;
+    }
+    label { font-weight: 600; font-size: 0.9rem; display:block; margin-top: 8px; }
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-top: 4px;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      margin-top: 12px;
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #1d4ed8; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .subject { font-size: 0.8rem; color: #555; }
+    .type { font-size: 0.8rem; display:inline-block; padding:2px 8px;
+            border-radius:999px; background:#eef; margin-top:4px; }
+    .filepath { font-size:0.8rem; color:#666; margin-top:4px; }
+    .empty { color:#666; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Frontend · Módulo de material</h1>
+  <p style="max-width: 650px;">
+    Esta página habla con el <strong>backend de material</strong> (FastAPI) para subir PDFs,
+    vídeos, código, etc. y ver lo que hay registrado.
+  </p>
+
+  <h2>Subir nuevo material</h2>
+  <form id="uploadForm">
+    <label>Asignatura</label>
+    <input id="subject" name="subject_id" placeholder="PROG3, Redes, IA..." required>
+
+    <label>Título</label>
+    <input id="title" name="title" placeholder="Apuntes Tema 1 · Árboles binarios" required>
+
+    <label>Tipo lógico</label>
+    <select id="logical_type" name="logical_type">
+      <option value="Apuntes">Apuntes (PDF/teoría)</option>
+      <option value="Práctica">Práctica</option>
+      <option value="Código">Código</option>
+      <option value="Vídeo">Vídeo</option>
+      <option value="Imagen">Imagen</option>
+      <option value="Otro">Otro</option>
+    </select>
+
+    <label>Descripción</label>
+    <textarea id="description" name="description" placeholder="Descripción breve del material..."></textarea>
+
+    <label>Fichero (PDF, vídeo, código, etc.)</label>
+    <input id="file" name="file" type="file" required>
+
+    <button type="submit">Subir y guardar</button>
+  </form>
+
+  <h2>Material registrado</h2>
+  <div id="list"></div>
+
+<script>
+  // URL del backend (si lo levantas en otra IP/puerto, cámbialo aquí)
+  const API_BASE = "http://127.0.0.1:8000";
+
+  async function loadMaterial() {
+    const list = document.getElementById("list");
+    list.innerHTML = "<p class='empty'>Cargando material...</p>";
+    try {
+      const res = await fetch(`${API_BASE}/api/material`);
+      const data = await res.json();
+
+      if (!data || data.length === 0) {
+        list.innerHTML = "<p class='empty'>Todavía no hay material registrado.</p>";
+        return;
+      }
+
+      let html = "";
+      for (const m of data) {
+        html += `
+          <div class="card">
+            <div><strong>${m.title}</strong></div>
+            <div class="subject">Asignatura: ${m.subject_id}</div>
+            <div class="type">${m.logical_type}</div>
+            <div class="filepath">Fichero: <code>${m.file_path}</code></div>
+            ${m.description ? `<p>${m.description}</p>` : ""}
+          </div>
+        `;
+      }
+      list.innerHTML = html;
+    } catch (e) {
+      console.error(e);
+      list.innerHTML = "<p class='empty'>Error al cargar el material.</p>";
+    }
+  }
+
+  document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formEl = document.getElementById("uploadForm");
+    const formData = new FormData(formEl);
+
+    try {
+      await fetch(`${API_BASE}/api/material/upload`, {
+        method: "POST",
+        body: formData
+      });
+
+      // limpiamos solo el archivo y el título, mantenemos asignatura
+      document.getElementById("title").value = "";
+      document.getElementById("description").value = "";
+      document.getElementById("file").value = "";
+      loadMaterial();
+    } catch (e) {
+      console.error(e);
+      alert("Error al subir el material");
+    }
+  });
+
+  loadMaterial();
+</script>
+</body>
+</html>
