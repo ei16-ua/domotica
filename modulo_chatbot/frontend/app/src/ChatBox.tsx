@@ -151,7 +151,9 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
         const file = e.target.files?.[0]
         if (file && file.type === 'application/pdf') {
             setSelectedFile(file)
-            setMaterialTitle(file.name.replace('.pdf', ''))
+            // Auto-fill title with filename without extension
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
+            setMaterialTitle(nameWithoutExt)
             setMaterialSubject(subjectId || '')
             setShowConfirmModal(true)
         } else if (file) {
@@ -177,9 +179,12 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
 
         setUploadLoading(true)
         try {
+            // If title is empty, use filename without extension
+            const finalTitle = materialTitle.trim() || selectedFile.name.replace(/\.[^/.]+$/, '')
+
             const formData = new FormData()
             formData.append('file', selectedFile)
-            formData.append('title', materialTitle)
+            formData.append('title', finalTitle)
             formData.append('subject_id', materialSubject)
             formData.append('description', materialDescription)
 
@@ -210,9 +215,16 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
                 setMaterialSubject('')
                 setMaterialDescription('')
             } else {
-                throw new Error('Error al guardar')
+                // Handle error response
+                const errorData = await response.json()
+                if (response.status === 409) {
+                    // Duplicate error
+                    alert(`⚠️ ${errorData.error || 'Este material ya existe'}`)
+                } else {
+                    throw new Error(errorData.error || 'Error al guardar')
+                }
             }
-        } catch {
+        } catch (err) {
             alert('Error al guardar el material')
         } finally {
             setUploadLoading(false)
@@ -321,14 +333,14 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
                         </h3>
                         <form onSubmit={handleSaveMaterial} className="space-y-4">
                             <div>
-                                <label className="block text-sm mb-1" style={{ color: theme.textSecondary }}>Título</label>
+                                <label className="block text-sm mb-1" style={{ color: theme.textSecondary }}>Título (opcional)</label>
                                 <input
                                     type="text"
                                     value={materialTitle}
                                     onChange={e => setMaterialTitle(e.target.value)}
+                                    placeholder="Si está vacío, usará el nombre del archivo"
                                     className="w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                                     style={{ backgroundColor: theme.input, borderColor: theme.border, color: theme.text }}
-                                    required
                                 />
                             </div>
                             <div>
@@ -381,7 +393,7 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={uploadLoading || !materialTitle || !materialSubject}
+                                    disabled={uploadLoading || !materialSubject}
                                     className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-xl font-medium hover:from-emerald-600 hover:to-cyan-600 transition-all disabled:opacity-50"
                                 >
                                     {uploadLoading ? 'Guardando...' : 'Guardar'}
@@ -475,8 +487,8 @@ export default function ChatBox({ token, username, onLogout }: ChatBoxProps) {
                             key={conv.id}
                             onClick={() => loadConversation(conv.id)}
                             className={`group flex items-center gap-3 p-3 rounded-xl cursor-pointer mb-1 transition-all border ${currentConversation === conv.id
-                                    ? 'bg-emerald-500/10 border-emerald-500/30'
-                                    : 'border-transparent'
+                                ? 'bg-emerald-500/10 border-emerald-500/30'
+                                : 'border-transparent'
                                 }`}
                             style={{
                                 backgroundColor: currentConversation === conv.id ? undefined : 'transparent'

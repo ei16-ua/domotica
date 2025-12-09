@@ -16,12 +16,14 @@ from langchain_groq import ChatGroq
 import database as db
 import auth
 
-load_dotenv()
+load_dotenv(override=True)  # Force reload .env
 
 # Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://127.0.0.1:8001")
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://127.0.0.1:8000")
 MATERIAL_SERVICE_URL = os.getenv("MATERIAL_SERVICE_URL", "http://127.0.0.1:8080")
+
+print(f"[CONFIG] RAG_SERVICE_URL = {RAG_SERVICE_URL}")
 
 # Light LLM for routing/classification (fast, small model)
 router_llm = ChatGroq(

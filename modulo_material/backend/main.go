@@ -100,6 +100,16 @@ func addMaterial(m Material) (int64, error) {
 	return res.LastInsertId()
 }
 
+// checkDuplicate returns true if a material with the same title and subject_id already exists
+func checkDuplicate(subjectID, title string) bool {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM material WHERE subject_id = ? AND title = ?", subjectID, title).Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
+}
+
 func getPathsForSubject(subjectID string) ([]string, error) {
 	rows, err := db.Query("SELECT file_path FROM material WHERE subject_id = ?", subjectID)
 	if err != nil {
@@ -178,15 +188,28 @@ func main() {
 				return
 			}
 
+			// Check for duplicates
+			finalTitle := strings.TrimSpace(title)
+			if finalTitle == "" {
+				// If no title, use filename without extension
+				finalTitle = strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename))
+			}
+
+			if checkDuplicate(strings.TrimSpace(subjectID), finalTitle) {
+				c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("Ya existe un material con título '%s' en la asignatura '%s'", finalTitle, subjectID)})
+				return
+			}
+
 			subjectDir := filepath.Join(FilesDir, strings.TrimSpace(subjectID))
 			if err := os.MkdirAll(subjectDir, 0755); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create subject directory"})
 				return
 			}
 
-			ts := time.Now().Unix()
-			safeName := strings.ReplaceAll(file.Filename, " ", "_")
-			destPath := filepath.Join(subjectDir, fmt.Sprintf("%d_%s", ts, safeName))
+			// Use finalTitle as filename, preserve extension from original file
+			ext := filepath.Ext(file.Filename)
+			safeTitle := strings.ReplaceAll(finalTitle, " ", "_")
+			destPath := filepath.Join(subjectDir, safeTitle+ext)
 
 			if err := c.SaveUploadedFile(file, destPath); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
@@ -195,7 +218,7 @@ func main() {
 
 			newID, err := addMaterial(Material{
 				SubjectID:    strings.TrimSpace(subjectID),
-				Title:        strings.TrimSpace(title),
+				Title:        finalTitle,
 				LogicalType:  strings.TrimSpace(logicalType),
 				FilePath:     destPath,
 				OriginalName: file.Filename,
@@ -242,10 +265,16 @@ func main() {
 			}
 
 			var uploadedFiles []gin.H
-			for _, file := range files {
-				ts := time.Now().UnixNano()
-				safeName := strings.ReplaceAll(file.Filename, " ", "_")
-				destPath := filepath.Join(subjectDir, fmt.Sprintf("%d_%s", ts, safeName))
+			for i, file := range files {
+				// Use title + index as filename for multiple files
+				ext := filepath.Ext(file.Filename)
+				safeTitle := strings.ReplaceAll(strings.TrimSpace(title), " ", "_")
+				var destPath string
+				if len(files) == 1 {
+					destPath = filepath.Join(subjectDir, safeTitle+ext)
+				} else {
+					destPath = filepath.Join(subjectDir, fmt.Sprintf("%s_%d%s", safeTitle, i+1, ext))
+				}
 
 				if err := c.SaveUploadedFile(file, destPath); err != nil {
 					continue

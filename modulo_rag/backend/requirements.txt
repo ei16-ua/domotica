@@ -20,3 +20,7 @@ sentence-transformers>=2.2.0
 
 # HTTP client
 httpx>=0.25.0
+
+# OCR for image-based PDFs
+easyocr>=1.7.0
+pymupdf>=1.23.0

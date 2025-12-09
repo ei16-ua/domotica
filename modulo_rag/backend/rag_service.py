@@ -14,14 +14,25 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.documents import Document
 
+# OCR imports for image-based PDFs
+import fitz  # PyMuPDF
+import easyocr
+import io
+from PIL import Image
+
 load_dotenv()
+
+# OCR: Minimum characters to consider a PDF as text-based
+MIN_TEXT_THRESHOLD = 100
 
 # Configuración
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 CHROMA_DIR = Path(__file__).parent / "chroma_db"
 
 # Modelo de embeddings gratuito (local)
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# BGE-M3: Modelo multilingual de alta calidad (1024 dimensiones)
+# Muy bueno para español y otros idiomas
+EMBEDDING_MODEL = "BAAI/bge-m3"
 
 # Modelo LLM en Groq
 LLM_MODEL = "llama-3.3-70b-versatile"
@@ -31,7 +42,7 @@ class RAGService:
     """Servicio RAG para procesar documentos y responder preguntas"""
     
     def __init__(self):
-        print("🔄 Inicializando RAG Service...")
+        print("[*] Inicializando RAG Service...")
         self.embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL)
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=2000,
@@ -47,7 +58,7 @@ class RAGService:
             max_tokens=2048,
         )
         self._load_existing_index()
-        print("✅ RAG Service inicializado")
+        print("[OK] RAG Service inicializado")
     
     def _load_existing_index(self):
         """Carga el índice existente si existe"""
@@ -56,12 +67,12 @@ class RAGService:
                 persist_directory=str(CHROMA_DIR),
                 embedding_function=self.embeddings,
             )
-            print(f"✓ Índice cargado desde {CHROMA_DIR}")
+            print(f"[+] Indice cargado desde {CHROMA_DIR}")
         else:
-            print("⚠ No hay índice existente. Usa /api/index para crear uno.")
+            print("[!] No hay indice existente. Usa /api/index para crear uno.")
     
     def load_document(self, file_path: str) -> List:
-        """Carga un documento según su extensión"""
+        """Carga un documento según su extensión, aplica OCR si es necesario"""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
@@ -69,13 +80,56 @@ class RAGService:
         ext = path.suffix.lower()
         
         if ext == ".pdf":
+            # First try normal PDF extraction
             loader = PyPDFLoader(str(path))
+            docs = loader.load()
+            
+            # Check if we got enough text
+            total_text = "".join(doc.page_content for doc in docs)
+            if len(total_text.strip()) < MIN_TEXT_THRESHOLD:
+                # PDF has little/no text, try OCR
+                print(f"[OCR] PDF con poco texto detectado, aplicando OCR: {path.name}")
+                docs = self._extract_pdf_with_ocr(path)
+            
+            return docs
         elif ext in [".txt", ".md", ".py", ".js", ".ts", ".go", ".java", ".c", ".cpp", ".h"]:
             loader = TextLoader(str(path), encoding="utf-8")
         else:
             loader = TextLoader(str(path), encoding="utf-8")
         
         return loader.load()
+    
+    def _extract_pdf_with_ocr(self, pdf_path: Path) -> List[Document]:
+        """Extrae texto de un PDF usando OCR (para PDFs basados en imágenes)"""
+        # Lazy load OCR reader (takes time to initialize)
+        if not hasattr(self, '_ocr_reader'):
+            print("[OCR] Inicializando EasyOCR (primera vez, puede tardar)...")
+            self._ocr_reader = easyocr.Reader(['es', 'en'], gpu=False)
+        
+        documents = []
+        pdf_doc = fitz.open(pdf_path)
+        
+        for page_num, page in enumerate(pdf_doc, 1):
+            # Render page to image
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better quality
+            img_data = pix.tobytes("png")
+            
+            # OCR the image
+            img = Image.open(io.BytesIO(img_data))
+            results = self._ocr_reader.readtext(img_data)
+            
+            # Extract text from OCR results
+            page_text = " ".join([result[1] for result in results])
+            
+            if page_text.strip():
+                documents.append(Document(
+                    page_content=page_text,
+                    metadata={"source": str(pdf_path), "page": page_num}
+                ))
+        
+        pdf_doc.close()
+        print(f"[OCR] Extraidas {len(documents)} paginas con texto")
+        return documents
     
     def index_documents(self, file_paths: List[str], subject_id: str) -> dict:
         """Indexa una lista de documentos para una asignatura"""
