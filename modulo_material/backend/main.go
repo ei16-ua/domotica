@@ -136,7 +136,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	r.Static("/material_files", FilesDir) // Servir archivos estáticos si es necesario
+	r.Static("/material_files", FilesDir)
 
 	api := r.Group("/api")
 	{
@@ -146,7 +146,6 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			// Si es nil, devolver array vacío en vez de null
 			if materials == nil {
 				materials = []Material{}
 			}
@@ -166,6 +165,7 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"subject_id": subjectID, "paths": paths})
 		})
 
+		// Upload single file
 		api.POST("/material/upload", func(c *gin.Context) {
 			subjectID := c.PostForm("subject_id")
 			title := c.PostForm("title")
@@ -178,7 +178,6 @@ func main() {
 				return
 			}
 
-			// Crear directorio para la asignatura
 			subjectDir := filepath.Join(FilesDir, strings.TrimSpace(subjectID))
 			if err := os.MkdirAll(subjectDir, 0755); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create subject directory"})
@@ -189,13 +188,11 @@ func main() {
 			safeName := strings.ReplaceAll(file.Filename, " ", "_")
 			destPath := filepath.Join(subjectDir, fmt.Sprintf("%d_%s", ts, safeName))
 
-			// Guardar archivo
 			if err := c.SaveUploadedFile(file, destPath); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
 				return
 			}
 
-			// Guardar en BBDD
 			newID, err := addMaterial(Material{
 				SubjectID:    strings.TrimSpace(subjectID),
 				Title:        strings.TrimSpace(title),
@@ -216,6 +213,68 @@ func main() {
 				"status":      "ok",
 				"id":          newID,
 				"stored_path": destPath,
+			})
+		})
+
+		// Upload multiple files for same subject
+		api.POST("/material/upload-multiple", func(c *gin.Context) {
+			subjectID := c.PostForm("subject_id")
+			title := c.PostForm("title")
+			logicalType := c.PostForm("logical_type")
+			description := c.PostForm("description")
+
+			form, err := c.MultipartForm()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Error parsing multipart form"})
+				return
+			}
+
+			files := form.File["files"]
+			if len(files) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "No files received"})
+				return
+			}
+
+			subjectDir := filepath.Join(FilesDir, strings.TrimSpace(subjectID))
+			if err := os.MkdirAll(subjectDir, 0755); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create subject directory"})
+				return
+			}
+
+			var uploadedFiles []gin.H
+			for _, file := range files {
+				ts := time.Now().UnixNano()
+				safeName := strings.ReplaceAll(file.Filename, " ", "_")
+				destPath := filepath.Join(subjectDir, fmt.Sprintf("%d_%s", ts, safeName))
+
+				if err := c.SaveUploadedFile(file, destPath); err != nil {
+					continue
+				}
+
+				newID, err := addMaterial(Material{
+					SubjectID:    strings.TrimSpace(subjectID),
+					Title:        strings.TrimSpace(title),
+					LogicalType:  strings.TrimSpace(logicalType),
+					FilePath:     destPath,
+					OriginalName: file.Filename,
+					MimeType:     file.Header.Get("Content-Type"),
+					Description:  strings.TrimSpace(description),
+					CreatedAt:    time.Now().Format(time.RFC3339),
+				})
+
+				if err == nil {
+					uploadedFiles = append(uploadedFiles, gin.H{
+						"id":        newID,
+						"filename":  file.Filename,
+						"stored_at": destPath,
+					})
+				}
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"status":         "ok",
+				"uploaded_count": len(uploadedFiles),
+				"files":          uploadedFiles,
 			})
 		})
 	}

@@ -19,13 +19,14 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Form state
   const [subjectId, setSubjectId] = useState('')
   const [title, setTitle] = useState('')
   const [logicalType, setLogicalType] = useState('documento')
   const [description, setDescription] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<FileList | null>(null)
 
   const fetchMaterials = async () => {
     try {
@@ -47,15 +48,15 @@ function App() {
   }, [])
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0])
+    if (e.target.files && e.target.files.length > 0) {
+      setFiles(e.target.files)
     }
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!file) {
-      setError('Selecciona un archivo')
+    if (!files || files.length === 0) {
+      setError('Selecciona al menos un archivo')
       return
     }
 
@@ -64,26 +65,48 @@ function App() {
     formData.append('title', title)
     formData.append('logical_type', logicalType)
     formData.append('description', description)
-    formData.append('file', file)
+
+    // Determine endpoint based on number of files
+    const isMultiple = files.length > 1
+    const endpoint = isMultiple ? '/api/material/upload-multiple' : '/api/material/upload'
+
+    if (isMultiple) {
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i])
+      }
+    } else {
+      formData.append('file', files[0])
+    }
 
     try {
       setUploading(true)
-      const res = await fetch(`${API_BASE}/api/material/upload`, {
+      setError(null)
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         body: formData,
       })
-      if (!res.ok) throw new Error('Error al subir archivo')
+      if (!res.ok) throw new Error('Error al subir archivo(s)')
+
+      const result = await res.json()
 
       // Reset form
       setSubjectId('')
       setTitle('')
       setLogicalType('documento')
       setDescription('')
-      setFile(null)
+      setFiles(null)
+
+      // Reset file input
+      const fileInput = document.getElementById('file-input') as HTMLInputElement
+      if (fileInput) fileInput.value = ''
+
+      // Show success message
+      const count = isMultiple ? result.uploaded_count : 1
+      setSuccessMessage(`✓ ${count} archivo(s) subido(s) correctamente`)
+      setTimeout(() => setSuccessMessage(null), 3000)
 
       // Refresh list
       await fetchMaterials()
-      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al subir')
     } finally {
@@ -106,6 +129,12 @@ function App() {
           {error && (
             <div className="bg-red-500/20 border border-red-500 text-red-200 px-4 py-2 rounded-lg mb-4">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="bg-green-500/20 border border-green-500 text-green-200 px-4 py-2 rounded-lg mb-4">
+              {successMessage}
             </div>
           )}
 
@@ -162,12 +191,22 @@ function App() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Archivo</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Archivos <span className="text-blue-400">(puedes seleccionar múltiples)</span>
+              </label>
               <input
+                id="file-input"
                 type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.mp4,.avi,.mov"
                 onChange={handleFileChange}
                 className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-500 file:text-white hover:file:bg-blue-600"
               />
+              {files && files.length > 0 && (
+                <p className="text-sm text-slate-400 mt-2">
+                  📎 {files.length} archivo(s) seleccionado(s)
+                </p>
+              )}
             </div>
 
             <button
@@ -175,7 +214,7 @@ function App() {
               disabled={uploading}
               className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200"
             >
-              {uploading ? 'Subiendo...' : 'Subir Material'}
+              {uploading ? 'Subiendo...' : `Subir ${files && files.length > 1 ? `${files.length} Archivos` : 'Material'}`}
             </button>
           </form>
         </div>
