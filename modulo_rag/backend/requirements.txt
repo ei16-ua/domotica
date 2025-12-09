@@ -20,8 +20,3 @@ sentence-transformers>=2.2.0
 
 # HTTP client
 httpx>=0.25.0
-
-# OCR para PDFs de imagen
-easyocr>=1.7.0
-pdf2image>=1.16.0
-Pillow>=10.0.0
